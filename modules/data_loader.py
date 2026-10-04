@@ -8,7 +8,6 @@ def load_master_data():
     try:
         xls = pd.ExcelFile(file_path)
         db_data = {}
-        # Loop through all sheets and skip the translation sheet
         for sheet in xls.sheet_names:
             if sheet.lower() != "translate":
                 df = pd.read_excel(xls, sheet_name=sheet)
@@ -27,12 +26,19 @@ def load_operations_data():
         df_11 = pd.read_excel(xls, sheet_name="drainag_11")
         df_gharb = pd.read_excel(xls, sheet_name="gharb_elburullus_new")
         
-        # Convert Arabic date column to a standard datetime format for filtering
-        if 'التاريخ' in df_11.columns:
-            df_11['Date'] = pd.to_datetime(df_11['التاريخ'], errors='coerce')
-        if 'التاريخ' in df_gharb.columns:
-            df_gharb['Date'] = pd.to_datetime(df_gharb['التاريخ'], errors='coerce')
+        # Check for English 'date' or Arabic 'التاريخ' dynamically
+        for df in [df_11, df_gharb]:
+            if 'date' in df.columns:
+                df['Date_Index'] = pd.to_datetime(df['date'], errors='coerce')
+            elif 'التاريخ' in df.columns:
+                df['Date_Index'] = pd.to_datetime(df['التاريخ'], errors='coerce')
             
+            # Extract day and month for easy overlapping in graphs
+            if 'Date_Index' in df.columns:
+                df['Day_of_Month'] = df['Date_Index'].dt.day
+                df['Month_Name'] = df['Date_Index'].dt.strftime('%B')
+                df['Year_Month'] = df['Date_Index'].dt.to_period('M').astype(str)
+
         return {"Station 11": df_11, "Gharb El Burullus": df_gharb}
     except Exception as e:
         st.error(f"Error loading Operations Data: {e}")
