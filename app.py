@@ -80,7 +80,6 @@ elif data_category == "Operations Data":
             with tab_levels:
                 st.subheader("Water Levels Visualization (Suction, Discharge, Head)")
                 
-                # Dynamic layout for level charts
                 level_cols = ['suction', 'discharge', 'head']
                 available_levels = [col for col in level_cols if col in df_target.columns]
                 
@@ -89,15 +88,19 @@ elif data_category == "Operations Data":
                     
                     with l_col1:
                         selected_level = st.selectbox("Select Metric", available_levels)
-                        chart_mode = st.radio("Chart Mode", ["Continuous Time Trend", "Month-over-Month Overlay"])
+                        chart_mode = st.radio("Chart Mode", ["Year-over-Year (Monthly Averages)", "Continuous Time Trend", "Daily Overlay (Specific Month)"])
                         
-                        if chart_mode == "Continuous Time Trend":
-                            years = df_target['Date_Index'].dt.year.dropna().unique()
-                            selected_years = st.multiselect("Select Year(s)", sorted(years), default=sorted(years))
+                        years = df_target['Date_Index'].dt.year.dropna().unique()
+                        
+                        if chart_mode == "Year-over-Year (Monthly Averages)":
+                            selected_years = st.multiselect("Select Year(s) to Compare", sorted(years), default=sorted(years), key='yoy_lvl_yr')
+                            plot_df = df_target[df_target['Date_Index'].dt.year.isin(selected_years)].copy()
+                        
+                        elif chart_mode == "Continuous Time Trend":
+                            selected_years = st.multiselect("Select Year(s)", sorted(years), default=sorted(years), key='cont_lvl_yr')
                             plot_df = df_target[df_target['Date_Index'].dt.year.isin(selected_years)]
                         
-                        elif chart_mode == "Month-over-Month Overlay":
-                            years = df_target['Date_Index'].dt.year.dropna().unique()
+                        elif chart_mode == "Daily Overlay (Specific Month)":
                             sel_year = st.selectbox("Select Year for Overlay", sorted(years))
                             months = df_target[df_target['Date_Index'].dt.year == sel_year]['Month_Name'].unique()
                             selected_months = st.multiselect("Select Months to Overlay", months, default=months[:2] if len(months)>1 else months)
@@ -107,25 +110,38 @@ elif data_category == "Operations Data":
                         if plot_df.empty:
                             st.warning("No data available for the selected filters.")
                         else:
-                            if chart_mode == "Continuous Time Trend":
+                            if chart_mode == "Year-over-Year (Monthly Averages)":
+                                # Calculate Monthly Average Level for each Year
+                                plot_df['Month_Num'] = plot_df['Date_Index'].dt.month
+                                plot_df['Month'] = plot_df['Date_Index'].dt.strftime('%b')
+                                plot_df['Year'] = plot_df['Date_Index'].dt.year.astype(str)
+                                
+                                avg_df = plot_df.groupby(['Year', 'Month_Num', 'Month'])[selected_level].mean().reset_index()
+                                avg_df = avg_df.sort_values(['Year', 'Month_Num'])
+                                
+                                fig = px.line(avg_df, x='Month', y=selected_level, color='Year', markers=True,
+                                              title=f"Monthly Average {selected_level.capitalize()} (Year-over-Year)",
+                                              labels={'Month': 'Month', selected_level: f'Avg {selected_level.capitalize()}'})
+                                st.plotly_chart(fig, use_container_width=True)
+                                
+                            elif chart_mode == "Continuous Time Trend":
                                 fig = px.line(plot_df, x='Date_Index', y=selected_level, title=f"{selected_level.capitalize()} Over Time")
-                                # Add rolling average line
                                 plot_df = plot_df.sort_values('Date_Index')
                                 plot_df['Monthly Avg'] = plot_df[selected_level].rolling(window=30, min_periods=1).mean()
                                 fig.add_trace(go.Scatter(x=plot_df['Date_Index'], y=plot_df['Monthly Avg'], mode='lines', name='30-Day Avg', line=dict(dash='dot', color='red')))
                                 st.plotly_chart(fig, use_container_width=True)
                                 
-                            elif chart_mode == "Month-over-Month Overlay":
+                            elif chart_mode == "Daily Overlay (Specific Month)":
                                 fig = px.line(plot_df, x='Day_of_Month', y=selected_level, color='Month_Name', markers=True,
                                               title=f"{selected_level.capitalize()} Comparison by Day of Month",
-                                              labels={'Day_of_Month': 'Day of the Month', selected_level: selected_level.capitalize()})
+                                              labels={'Day_of_Month': 'Day of the Month'})
                                 st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.warning("Level columns (suction, discharge, head) not found in this dataset.")
 
             # --- TAB 3: OPERATING HOURS ANALYSIS ---
             with tab_hours:
-                st.subheader("Pump Units Operating Hours")
+                st.subheader("Year-over-Year Operating Hours Analysis")
                 
                 unit_cols = [col for col in df_target.columns if 'unit' in col.lower() or 'total' in col.lower()]
                 
@@ -133,28 +149,32 @@ elif data_category == "Operations Data":
                     h_col1, h_col2 = st.columns([1, 3])
                     
                     with h_col1:
-                        selected_units = st.multiselect("Select Units to Compare", unit_cols, default=[unit_cols[-1]] if unit_cols else [])
-                        agg_type = st.radio("Aggregation Level", ["Daily (Specific Month)", "Monthly (Yearly Summary)"])
+                        # Select exactly ONE unit (or total) to compare across years
+                        selected_unit = st.selectbox("Select Equipment/Unit", unit_cols, index=len(unit_cols)-1)
                         
-                        if agg_type == "Daily (Specific Month)":
-                            y_sel = st.selectbox("Select Year", sorted(df_target['Date_Index'].dt.year.dropna().unique()), key='h_yr')
-                            m_sel = st.selectbox("Select Month", range(1, 13), key='h_mo')
-                            hours_df = df_target[(df_target['Date_Index'].dt.year == y_sel) & (df_target['Date_Index'].dt.month == m_sel)]
-                            x_axis = 'Date_Index'
-                        else:
-                            y_sel = st.selectbox("Select Year", sorted(df_target['Date_Index'].dt.year.dropna().unique()), key='h_yr_all')
-                            base_df = df_target[df_target['Date_Index'].dt.year == y_sel]
-                            hours_df = base_df.groupby('Year_Month')[selected_units].sum().reset_index()
-                            x_axis = 'Year_Month'
-
+                        years = df_target['Date_Index'].dt.year.dropna().unique()
+                        selected_years_hrs = st.multiselect("Select Year(s) to Compare", sorted(years), default=sorted(years), key='yoy_hrs_yr')
+                        
                     with h_col2:
-                        if hours_df.empty or not selected_units:
-                            st.warning("Select units and valid dates to view operating hours.")
+                        plot_df_hrs = df_target[df_target['Date_Index'].dt.year.isin(selected_years_hrs)].copy()
+                        
+                        if plot_df_hrs.empty:
+                            st.warning("No data available for the selected years.")
                         else:
-                            # Melt dataframe for multi-unit comparison grouped bar chart
-                            melted_df = hours_df.melt(id_vars=[x_axis], value_vars=selected_units, var_name='Unit', value_name='Hours')
-                            fig2 = px.bar(melted_df, x=x_axis, y='Hours', color='Unit', barmode='group',
-                                          title=f"Operating Hours Comparison - {agg_type}")
+                            # Calculate Total Operating Hours per Month for each Year
+                            plot_df_hrs['Month_Num'] = plot_df_hrs['Date_Index'].dt.month
+                            plot_df_hrs['Month'] = plot_df_hrs['Date_Index'].dt.strftime('%b')
+                            plot_df_hrs['Year'] = plot_df_hrs['Date_Index'].dt.year.astype(str)
+                            
+                            sum_df = plot_df_hrs.groupby(['Year', 'Month_Num', 'Month'])[selected_unit].sum().reset_index()
+                            sum_df = sum_df.sort_values(['Year', 'Month_Num'])
+                            
+                            fig2 = px.line(sum_df, x='Month', y=selected_unit, color='Year', markers=True,
+                                          title=f"Total Monthly Operating Hours for '{selected_unit}' (Year-over-Year)",
+                                          labels={'Month': 'Month', selected_unit: 'Total Operating Hours'})
+                            
+                            # Add a bar chart layout dynamically for better visual comparison
+                            fig2.update_traces(line=dict(width=3), marker=dict(size=8))
                             st.plotly_chart(fig2, use_container_width=True)
                 else:
                     st.warning("No unit operating hours columns found in this dataset.")
