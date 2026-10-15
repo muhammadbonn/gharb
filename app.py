@@ -7,7 +7,7 @@ from tabs.ops_calc import render_ops_calc
 from tabs.ops_trend import render_ops_trend
 
 st.set_page_config(page_title="Asset Management for Gharb El Burullus", layout="wide")
-st.title("Asset Management for Gharb El Burullus")
+st.title("Asset Management for Gharb El Burullus Stations")
 st.markdown("---")
 
 st.sidebar.header("Navigation")
