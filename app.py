@@ -46,7 +46,6 @@ elif data_category == "Operations Data":
             st.warning("No valid date format found in the dataset.")
             st.dataframe(df_target)
         else:
-            # Create sub-tabs for organizing the dashboard
             tab_data, tab_levels, tab_hours = st.tabs(["📊 Data Table & Filters", "🌊 Water Levels Analysis", "⚙️ Operating Hours Analysis"])
             
             # --- TAB 1: DATA TABLE & DATE FILTRATION ---
@@ -111,7 +110,6 @@ elif data_category == "Operations Data":
                             st.warning("No data available for the selected filters.")
                         else:
                             if chart_mode == "Year-over-Year (Monthly Averages)":
-                                # Calculate Monthly Average Level for each Year
                                 plot_df['Month_Num'] = plot_df['Date_Index'].dt.month
                                 plot_df['Month'] = plot_df['Date_Index'].dt.strftime('%b')
                                 plot_df['Year'] = plot_df['Date_Index'].dt.year.astype(str)
@@ -141,17 +139,61 @@ elif data_category == "Operations Data":
 
             # --- TAB 3: OPERATING HOURS ANALYSIS ---
             with tab_hours:
-                st.subheader("Year-over-Year Operating Hours Analysis")
-                
                 unit_cols = [col for col in df_target.columns if 'unit' in col.lower() or 'total' in col.lower()]
                 
                 if unit_cols:
+                    # 1. SUMMARY CALCULATOR SECTION
+                    st.markdown("### 🧮 Summary Calculator")
+                    st.markdown("Calculate Total or Average operating hours for specific units over any period.")
+                    
+                    calc_col1, calc_col2, calc_col3 = st.columns(3)
+                    
+                    with calc_col1:
+                        calc_units = st.multiselect("Select Unit(s) for Calculation", unit_cols, default=[unit_cols[-1]])
+                        calc_type = st.radio("Calculation Type", ["Total (Sum)", "Average (Mean)"])
+                        
+                    with calc_col2:
+                        period_type = st.radio("Select Period Type", ["All Time", "Specific Year(s)", "Specific Month/Year", "Custom Date Range"])
+                        
+                    with calc_col3:
+                        calc_df = df_target.copy()
+                        min_dt = calc_df['Date_Index'].min().date()
+                        max_dt = calc_df['Date_Index'].max().date()
+                        
+                        if period_type == "Specific Year(s)":
+                            avail_years = calc_df['Date_Index'].dt.year.dropna().unique()
+                            sel_yrs = st.multiselect("Select Year(s)", sorted(avail_years), default=sorted(avail_years))
+                            calc_df = calc_df[calc_df['Date_Index'].dt.year.isin(sel_yrs)]
+                        elif period_type == "Specific Month/Year":
+                            avail_years = calc_df['Date_Index'].dt.year.dropna().unique()
+                            sel_yr = st.selectbox("Select Year", sorted(avail_years), key='calc_yr')
+                            sel_mo = st.selectbox("Select Month", range(1, 13), key='calc_mo')
+                            calc_df = calc_df[(calc_df['Date_Index'].dt.year == sel_yr) & (calc_df['Date_Index'].dt.month == sel_mo)]
+                        elif period_type == "Custom Date Range":
+                            d_range = st.date_input("Select Date Range", value=(min_dt, max_dt), min_value=min_dt, max_value=max_dt)
+                            if isinstance(d_range, tuple) and len(d_range) == 2:
+                                calc_df = calc_df[(calc_df['Date_Index'].dt.date >= d_range[0]) & (calc_df['Date_Index'].dt.date <= d_range[1])]
+                    
+                    # Display the Output Table
+                    if not calc_df.empty and calc_units:
+                        if calc_type == "Total (Sum)":
+                            result_df = calc_df[calc_units].sum().to_frame(name="Total Operating Hours").T
+                        else:
+                            result_df = calc_df[calc_units].mean().round(2).to_frame(name="Average Daily Hours").T
+                        
+                        st.success(f"Calculation Result ({period_type}):")
+                        st.dataframe(result_df, use_container_width=True)
+                    else:
+                        st.info("Please select at least one unit and a valid date range to see the summary.")
+                        
+                    st.markdown("---")
+                    
+                    # 2. YEAR-OVER-YEAR TREND SECTION
+                    st.markdown("### 📈 Year-over-Year Trend")
                     h_col1, h_col2 = st.columns([1, 3])
                     
                     with h_col1:
-                        # Select exactly ONE unit (or total) to compare across years
-                        selected_unit = st.selectbox("Select Equipment/Unit", unit_cols, index=len(unit_cols)-1)
-                        
+                        selected_unit = st.selectbox("Select Equipment/Unit to Visualize", unit_cols, index=len(unit_cols)-1)
                         years = df_target['Date_Index'].dt.year.dropna().unique()
                         selected_years_hrs = st.multiselect("Select Year(s) to Compare", sorted(years), default=sorted(years), key='yoy_hrs_yr')
                         
@@ -161,7 +203,6 @@ elif data_category == "Operations Data":
                         if plot_df_hrs.empty:
                             st.warning("No data available for the selected years.")
                         else:
-                            # Calculate Total Operating Hours per Month for each Year
                             plot_df_hrs['Month_Num'] = plot_df_hrs['Date_Index'].dt.month
                             plot_df_hrs['Month'] = plot_df_hrs['Date_Index'].dt.strftime('%b')
                             plot_df_hrs['Year'] = plot_df_hrs['Date_Index'].dt.year.astype(str)
@@ -173,7 +214,6 @@ elif data_category == "Operations Data":
                                           title=f"Total Monthly Operating Hours for '{selected_unit}' (Year-over-Year)",
                                           labels={'Month': 'Month', selected_unit: 'Total Operating Hours'})
                             
-                            # Add a bar chart layout dynamically for better visual comparison
                             fig2.update_traces(line=dict(width=3), marker=dict(size=8))
                             st.plotly_chart(fig2, use_container_width=True)
                 else:
