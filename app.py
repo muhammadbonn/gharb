@@ -5,8 +5,9 @@ import plotly.graph_objects as go
 from modules.data_loader import load_master_data, load_operations_data
 from modules.filters import get_available_stations, filter_master_data
 
-st.set_page_config(page_title="Pumping Stations Dashboard", layout="wide")
-st.title("Pumping Stations Management Dashboard")
+# Set the updated page title and layout
+st.set_page_config(page_title="Asset Management for Gharb El Burullus", layout="wide")
+st.title("Asset Management for Gharb El Burullus")
 st.markdown("---")
 
 st.sidebar.header("Navigation")
@@ -29,22 +30,30 @@ if data_category == "Master Data":
         if not filtered_df.empty:
             st.success(f"Showing {selected_component} records for {selected_station}")
             
-            # Table into Cards
-            for idx, row in filtered_df.iterrows():
-                with st.container(border=True):
-                    st.markdown(f"#### ⚙️ {selected_component} Details")
-                    
-                    cols = st.columns(4)
-                    col_idx = 0
-                    
-                    for col_name, value in row.items():
-                        if pd.isna(value) or str(value).strip() == "":
-                            continue
-                            
-                        clean_name = str(col_name).replace('_', ' ').title()
+            # Option to toggle between Table and Card views
+            display_mode = st.radio("Display Mode", ["Table View", "Card View"], horizontal=True)
+            
+            if display_mode == "Table View":
+                st.dataframe(filtered_df, use_container_width=True)
+            else:
+                # Card View Rendering
+                for idx, row in filtered_df.iterrows():
+                    with st.container(border=True):
+                        st.markdown(f"#### ⚙️ {selected_component} Details")
+                        cols = st.columns(4)
+                        col_idx = 0
                         
-                        cols[col_idx % 4].metric(label=clean_name, value=str(value))
-                        col_idx += 1
+                        for col_name, value in row.items():
+                            # Skip null or empty values
+                            if pd.isna(value) or str(value).strip() == "":
+                                continue
+                                
+                            # Clean the column name for better readability
+                            clean_name = str(col_name).replace('_', ' ').title()
+                            
+                            # Place the value inside a metric card
+                            cols[col_idx % 4].metric(label=clean_name, value=str(value))
+                            col_idx += 1
         else:
             st.info(f"No {selected_component} records found for {selected_station}.")
 
@@ -61,7 +70,7 @@ elif data_category == "Operations Data":
             st.warning("No valid date format found in the dataset.")
             st.dataframe(df_target)
         else:
-            # Create 4 sub-tabs instead of 3
+            # Create 4 sub-tabs
             tab_data, tab_levels, tab_calc, tab_trend = st.tabs([
                 "📊 Data Table & Filters", 
                 "🌊 Water Levels Analysis", 
@@ -111,14 +120,23 @@ elif data_category == "Operations Data":
                         chart_mode = st.radio("Chart Mode", ["Year-over-Year (Monthly Averages)", "Continuous Time Trend", "Daily Overlay (Specific Month)"])
                         
                         years = df_target['Date_Index'].dt.year.dropna().unique()
+                        max_year = int(max(years))
                         
                         if chart_mode == "Year-over-Year (Monthly Averages)":
-                            selected_years = st.multiselect("Select Year(s) to Compare", sorted(years), default=sorted(years), key='yoy_lvl_yr')
+                            # Default to the most recent year to avoid clutter
+                            selected_years = st.multiselect("Select Year(s) to Compare", sorted(years), default=[max_year], key='yoy_lvl_yr')
                             plot_df = df_target[df_target['Date_Index'].dt.year.isin(selected_years)].copy()
                         
                         elif chart_mode == "Continuous Time Trend":
-                            selected_years = st.multiselect("Select Year(s)", sorted(years), default=sorted(years), key='cont_lvl_yr')
-                            plot_df = df_target[df_target['Date_Index'].dt.year.isin(selected_years)]
+                            # Use a slider for continuous range instead of multiselect
+                            min_year = int(min(years))
+                            if min_year == max_year:
+                                sel_range = (min_year, max_year)
+                                st.info(f"Data available only for year {min_year}")
+                            else:
+                                sel_range = st.slider("Select Year Range", min_value=min_year, max_value=max_year, value=(min_year, max_year), key='cont_lvl_yr')
+                            
+                            plot_df = df_target[(df_target['Date_Index'].dt.year >= sel_range[0]) & (df_target['Date_Index'].dt.year <= sel_range[1])]
                         
                         elif chart_mode == "Daily Overlay (Specific Month)":
                             sel_year = st.selectbox("Select Year for Overlay", sorted(years))
@@ -182,7 +200,8 @@ elif data_category == "Operations Data":
                         
                         if period_type == "Specific Year(s)":
                             avail_years = calc_df['Date_Index'].dt.year.dropna().unique()
-                            sel_yrs = st.multiselect("Select Year(s)", sorted(avail_years), default=sorted(avail_years))
+                            # Default to max year only
+                            sel_yrs = st.multiselect("Select Year(s)", sorted(avail_years), default=[max(avail_years)])
                             calc_df = calc_df[calc_df['Date_Index'].dt.year.isin(sel_yrs)]
                         elif period_type == "Specific Month/Year":
                             avail_years = calc_df['Date_Index'].dt.year.dropna().unique()
@@ -218,7 +237,9 @@ elif data_category == "Operations Data":
                     with h_col1:
                         selected_unit = st.selectbox("Select Equipment/Unit to Visualize", unit_cols, index=len(unit_cols)-1)
                         years = df_target['Date_Index'].dt.year.dropna().unique()
-                        selected_years_hrs = st.multiselect("Select Year(s) to Compare", sorted(years), default=sorted(years), key='yoy_hrs_yr')
+                        
+                        # Default to the most recent year to prevent selecting all years at once
+                        selected_years_hrs = st.multiselect("Select Year(s) to Compare", sorted(years), default=[int(max(years))], key='yoy_hrs_yr')
                         
                     with h_col2:
                         plot_df_hrs = df_target[df_target['Date_Index'].dt.year.isin(selected_years_hrs)].copy()
