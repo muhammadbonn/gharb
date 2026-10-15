@@ -46,7 +46,13 @@ elif data_category == "Operations Data":
             st.warning("No valid date format found in the dataset.")
             st.dataframe(df_target)
         else:
-            tab_data, tab_levels, tab_hours = st.tabs(["📊 Data Table & Filters", "🌊 Water Levels Analysis", "⚙️ Operating Hours Analysis"])
+            # Create 4 sub-tabs instead of 3
+            tab_data, tab_levels, tab_calc, tab_trend = st.tabs([
+                "📊 Data Table & Filters", 
+                "🌊 Water Levels Analysis", 
+                "🧮 Summary Calculator", 
+                "📈 Operating Hours Trend"
+            ])
             
             # --- TAB 1: DATA TABLE & DATE FILTRATION ---
             with tab_data:
@@ -137,12 +143,11 @@ elif data_category == "Operations Data":
                 else:
                     st.warning("Level columns (suction, discharge, head) not found in this dataset.")
 
-            # --- TAB 3: OPERATING HOURS ANALYSIS ---
-            with tab_hours:
+            # --- TAB 3: SUMMARY CALCULATOR ---
+            with tab_calc:
                 unit_cols = [col for col in df_target.columns if 'unit' in col.lower() or 'total' in col.lower()]
                 
                 if unit_cols:
-                    # 1. SUMMARY CALCULATOR SECTION
                     st.markdown("### 🧮 Summary Calculator")
                     st.markdown("Calculate Total or Average operating hours for specific units over any period.")
                     
@@ -174,7 +179,6 @@ elif data_category == "Operations Data":
                             if isinstance(d_range, tuple) and len(d_range) == 2:
                                 calc_df = calc_df[(calc_df['Date_Index'].dt.date >= d_range[0]) & (calc_df['Date_Index'].dt.date <= d_range[1])]
                     
-                    # Display the Output Table
                     if not calc_df.empty and calc_units:
                         if calc_type == "Total (Sum)":
                             result_df = calc_df[calc_units].sum().to_frame(name="Total Operating Hours").T
@@ -185,10 +189,14 @@ elif data_category == "Operations Data":
                         st.dataframe(result_df, use_container_width=True)
                     else:
                         st.info("Please select at least one unit and a valid date range to see the summary.")
-                        
-                    st.markdown("---")
+                else:
+                    st.warning("No unit operating hours columns found in this dataset.")
                     
-                    # 2. YEAR-OVER-YEAR TREND SECTION
+            # --- TAB 4: OPERATING HOURS TREND ---
+            with tab_trend:
+                unit_cols = [col for col in df_target.columns if 'unit' in col.lower() or 'total' in col.lower()]
+                
+                if unit_cols:
                     st.markdown("### 📈 Year-over-Year Trend")
                     h_col1, h_col2 = st.columns([1, 3])
                     
