@@ -28,10 +28,25 @@ if data_category == "Master Data":
         
         if not filtered_df.empty:
             st.success(f"Showing {selected_component} records for {selected_station}")
+            
+            # Table into Cards
+            for idx, row in filtered_df.iterrows():
+                with st.container(border=True):
+                    st.markdown(f"#### ⚙️ {selected_component} Details")
+                    
+                    cols = st.columns(4)
+                    col_idx = 0
+                    
+                    for col_name, value in row.items():
+                        if pd.isna(value) or str(value).strip() == "":
+                            continue
+                            
+                        clean_name = str(col_name).replace('_', ' ').title()
+                        
+                        cols[col_idx % 4].metric(label=clean_name, value=str(value))
+                        col_idx += 1
         else:
             st.info(f"No {selected_component} records found for {selected_station}.")
-            
-        st.dataframe(filtered_df, use_container_width=True)
 
 # ----------------- OPERATIONS DATA MODULE ----------------- #
 elif data_category == "Operations Data":
