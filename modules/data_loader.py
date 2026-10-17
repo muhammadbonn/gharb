@@ -10,18 +10,25 @@ def load_master_data():
   Returns a dictionary where keys are sheet names (equipment types)
   and values are DataFrames containing specifications.
   """
-  file_paths = [
-      os.path.join("data", "master_data.xlsx"),
-      os.path.join("data", "master_data.xls"),
-      "master_data.xlsx",
-      "master_data.xls",
-  ]
+
+file_paths = [
+    os.path.join("data", "transactions_data.csv"),
+    os.path.join("data", "transactions_data.xls"),
+    os.path.join("data", "transactions_data.xlsx"),
+    os.path.join("data", "transactions_data_clean.csv"),
+    "transactions_data.csv",
+    "transactions_data.xls",
+    "transactions_data.xlsx",
+]
+
 
   target_path = next((p for p in file_paths if os.path.exists(p)), None)
 
   if not target_path:
-    st.error("Master data file 'master_data.xlsx' not found in data/ folder.")
-    return None
+    st.error(
+      "Operations data file 'transactions_data.csv' "
+      "or Excel equivalent not found in data/ folder.")
+  return None
 
   try:
     xls = pd.ExcelFile(target_path)
