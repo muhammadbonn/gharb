@@ -1,37 +1,47 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from modules.data_loader import get_station_unit_columns
 
-def render_ops_trend(df_target):
-    unit_cols = [col for col in df_target.columns if 'unit' in col.lower() or 'total' in col.lower()]
+def render_ops_trend(df_station):
+    """
+    Renders Year-over-Year operating hours trend analysis.
+    """
+    st.markdown("### 📈 Operating Hours Trend")
     
-    if unit_cols:
-        st.markdown("### 📈 Year-over-Year Trend")
+    valid_units = get_station_unit_columns(df_station)
+    total_col = 'total_hr' if 'total_hr' in df_station.columns else ('total' if 'total' in df_station.columns else None)
+    
+    selectable_cols = valid_units + ([total_col] if total_col else [])
+    
+    if selectable_cols:
         h_col1, h_col2 = st.columns([1, 3])
         
         with h_col1:
-            selected_unit = st.selectbox("Select Equipment/Unit to Visualize", unit_cols, index=len(unit_cols)-1)
-            years = df_target['Date_Index'].dt.year.dropna().unique()
-            selected_years_hrs = st.multiselect("Select Year(s) to Compare", sorted(years), default=[int(max(years))], key='yoy_hrs_yr')
+            selected_metric = st.selectbox("Select Unit / Total to Visualize", selectable_cols)
+            years = sorted(df_station['Date_Index'].dt.year.dropna().unique())
+            max_year = int(max(years)) if years else 2026
+            selected_years = st.multiselect("Select Year(s) to Compare", years, default=[max_year], key='yoy_hrs_yr')
             
         with h_col2:
-            plot_df_hrs = df_target[df_target['Date_Index'].dt.year.isin(selected_years_hrs)].copy()
+            plot_df = df_station[df_station['Date_Index'].dt.year.isin(selected_years)].copy()
             
-            if plot_df_hrs.empty:
-                st.warning("No data available for the selected years.")
+            if plot_df.empty or plot_df[selected_metric].dropna().empty:
+                st.warning("No data recorded for the selected year(s).")
             else:
-                plot_df_hrs['Month_Num'] = plot_df_hrs['Date_Index'].dt.month
-                plot_df_hrs['Month'] = plot_df_hrs['Date_Index'].dt.strftime('%b')
-                plot_df_hrs['Year'] = plot_df_hrs['Date_Index'].dt.year.astype(str)
+                plot_df['Month_Num'] = plot_df['Date_Index'].dt.month
+                plot_df['Month'] = plot_df['Date_Index'].dt.strftime('%b')
+                plot_df['Year'] = plot_df['Date_Index'].dt.year.astype(str)
                 
-                sum_df = plot_df_hrs.groupby(['Year', 'Month_Num', 'Month'])[selected_unit].sum().reset_index()
+                sum_df = plot_df.groupby(['Year', 'Month_Num', 'Month'])[selected_metric].sum().reset_index()
                 sum_df = sum_df.sort_values(['Year', 'Month_Num'])
                 
-                fig2 = px.line(sum_df, x='Month', y=selected_unit, color='Year', markers=True,
-                               title=f"Total Monthly Operating Hours for '{selected_unit}' (Year-over-Year)",
-                               labels={'Month': 'Month', selected_unit: 'Total Operating Hours'})
+                clean_name = selected_metric.replace('_', ' ').title()
+                fig = px.line(sum_df, x='Month', y=selected_metric, color='Year', markers=True,
+                              title=f"Total Monthly Operating Hours for '{clean_name}'",
+                              labels={'Month': 'Month', selected_metric: 'Operating Hours'})
                 
-                fig2.update_traces(line=dict(width=3), marker=dict(size=8))
-                st.plotly_chart(fig2, use_container_width=True)
+                fig.update_traces(line=dict(width=3), marker=dict(size=8))
+                st.plotly_chart(fig, use_container_width=True)
     else:
-        st.warning("No unit operating hours columns found in this dataset.")
+        st.warning("No unit operating hours data found for this station.")
