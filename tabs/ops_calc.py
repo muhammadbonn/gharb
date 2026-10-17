@@ -5,10 +5,11 @@ from modules.data_loader import get_station_unit_columns
 def render_ops_calc(df_station):
     """
     Renders Summary Calculator for unit operating hours and energy consumption.
+    Provides detailed breakdown rows based on the selected time periods.
     """
     st.markdown("### 🧮 Summary Calculator")
     
-    # Get station-specific unit columns
+    # Identify valid unit columns for the active station
     valid_units = get_station_unit_columns(df_station)
     
     # Check for total hours and energy columns
@@ -40,26 +41,59 @@ def render_ops_calc(df_station):
             max_dt = calc_df['Date_Index'].max().date()
             avail_years = sorted(calc_df['Date_Index'].dt.year.dropna().unique())
             
+            # Filters variables
+            sel_yrs = []
+            sel_yr_mo = None
+            sel_mo = None
+            d_range = None
+            
             if period_type == "Specific Year(s)" and avail_years:
                 sel_yrs = st.multiselect("Select Year(s)", avail_years, default=[max(avail_years)])
                 calc_df = calc_df[calc_df['Date_Index'].dt.year.isin(sel_yrs)]
+                
             elif period_type == "Specific Month/Year" and avail_years:
-                sel_yr = st.selectbox("Select Year", avail_years, key='calc_yr')
+                sel_yr_mo = st.selectbox("Select Year", avail_years, key='calc_yr')
                 sel_mo = st.selectbox("Select Month", range(1, 13), key='calc_mo')
-                calc_df = calc_df[(calc_df['Date_Index'].dt.year == sel_yr) & (calc_df['Date_Index'].dt.month == sel_mo)]
+                calc_df = calc_df[(calc_df['Date_Index'].dt.year == sel_yr_mo) & (calc_df['Date_Index'].dt.month == sel_mo)]
+                
             elif period_type == "Custom Date Range":
                 d_range = st.date_input("Select Date Range", value=(min_dt, max_dt), min_value=min_dt, max_value=max_dt)
                 if isinstance(d_range, tuple) and len(d_range) == 2:
                     calc_df = calc_df[(calc_df['Date_Index'].dt.date >= d_range[0]) & (calc_df['Date_Index'].dt.date <= d_range[1])]
-        
+
+        # Ensure valid data and metrics are selected
         if not calc_df.empty and calc_metrics:
-            if calc_type == "Total (Sum)":
-                result = calc_df[calc_metrics].sum(numeric_only=True).to_frame(name="Total Sum").T
-            else:
-                result = calc_df[calc_metrics].mean(numeric_only=True).round(2).to_frame(name="Daily Average").T
+            calc_label = "Total Sum" if calc_type == "Total (Sum)" else "Daily Average"
             
-            st.success(f"Calculation Results ({period_type}):")
+            # --- Dynamic Breakdown Logic ---
+            if period_type == "Specific Year(s)" and len(sel_yrs) > 0:
+                # Group by Year to show one row per selected year
+                if calc_type == "Total (Sum)":
+                    result = calc_df.groupby('Year')[calc_metrics].sum(numeric_only=True)
+                else:
+                    result = calc_df.groupby('Year')[calc_metrics].mean(numeric_only=True).round(2)
+                
+                # Format the index to clearly show Year and Calc Type
+                result.index = result.index.map(lambda y: f"{y} - {calc_label}")
+                
+            else:
+                # Single row calculation for All Time, Specific Month, or Custom Date
+                if calc_type == "Total (Sum)":
+                    result = calc_df[calc_metrics].sum(numeric_only=True).to_frame(name=f"Selected Period - {calc_label}").T
+                else:
+                    result = calc_df[calc_metrics].mean(numeric_only=True).round(2).to_frame(name=f"Selected Period - {calc_label}").T
+                
+                # Customize index name based on specific selection
+                if period_type == "All Time":
+                    result.index = [f"All Time ({min_dt.year}-{max_dt.year}) - {calc_label}"]
+                elif period_type == "Specific Month/Year":
+                    result.index = [f"{sel_yr_mo}-{sel_mo:02d} - {calc_label}"]
+                elif period_type == "Custom Date Range" and d_range:
+                    result.index = [f"{d_range[0]} to {d_range[1]} - {calc_label}"]
+
+            st.success(f"Calculation Results Breakdown ({period_type}):")
             st.dataframe(result, use_container_width=True)
+            
         else:
             st.info("Please select at least one valid metric and period.")
     else:
